@@ -206,12 +206,14 @@ export interface InvestigationResult {
 
   // Memory status
   memoryStatus: {
-    available: boolean;
+    status: 'NOT_CONFIGURED' | 'AVAILABLE' | 'FAILED' | 'UNAUTHORIZED' | 'RATE_LIMITED';
+    error?: string;
   };
 
   // AI reasoning status
   aiReasoningStatus: {
-    available: boolean;
+    status: 'NOT_CONFIGURED' | 'AVAILABLE' | 'FAILED' | 'UNAUTHORIZED' | 'RATE_LIMITED';
+    error?: string;
   };
 
   // Input summary

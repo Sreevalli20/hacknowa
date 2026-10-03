@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { runInvestigation } from './src/utils/investigationOrchestrator.ts';
 import { initializeBreethMemory, storeInvestigation, getBreethStatus } from './src/utils/breethMemory.ts';
 import { initializeGroq, getGroqStatus } from './src/utils/groqReasoning.ts';
+import { initializeOpenRouter, getOpenRouterStatus } from './src/utils/openrouterReasoning.ts';
 import { dbService } from './src/server/db.ts';
 import {
   InvestigationResult,
@@ -22,21 +23,41 @@ const port = parseInt(process.env.PORT || '3000', 10);
 
 app.use(express.json({ limit: '25mb' }));
 
-// Initialize Breeth memory (optional, graceful degradation)
-const breethStatus = initializeBreethMemory();
-if (breethStatus.available) {
-  console.log('Breeth memory service initialized');
-} else {
-  console.log('Breeth memory service unavailable (operating without external memory)');
+// Initialize providers (async initialization with real API tests)
+async function initializeProviders() {
+  console.log('Initializing TRACEZERO providers...');
+
+  // Initialize Breeth
+  try {
+    const breethResult = await initializeBreethMemory();
+    console.log(`Breeth: ${breethResult.status}${breethResult.error ? ` (${breethResult.error})` : ''}`);
+  } catch (error) {
+    console.error('Breeth initialization error:', error);
+  }
+
+  // Initialize Groq
+  try {
+    const groqResult = await initializeGroq();
+    console.log(`Groq: ${groqResult.status}${groqResult.error ? ` (${groqResult.error})` : ''}`);
+  } catch (error) {
+    console.error('Groq initialization error:', error);
+  }
+
+  // Initialize OpenRouter
+  try {
+    const openRouterResult = await initializeOpenRouter();
+    console.log(`OpenRouter: ${openRouterResult.status}${openRouterResult.error ? ` (${openRouterResult.error})` : ''}`);
+  } catch (error) {
+    console.error('OpenRouter initialization error:', error);
+  }
+
+  console.log('Provider initialization complete');
 }
 
-// Initialize Groq reasoning (optional, graceful degradation)
-const groqStatus = initializeGroq();
-if (groqStatus.available) {
-  console.log('Groq contextual reasoning service initialized');
-} else {
-  console.log('Groq contextual reasoning service unavailable (operating with deterministic analysis only)');
-}
+// Start provider initialization (non-blocking)
+initializeProviders().catch((err) => {
+  console.error('Provider initialization failed:', err);
+});
 
 // Auth middleware
 function requireAuth(req: Request, res: Response, next: () => void) {
@@ -80,13 +101,29 @@ app.get('/health', (_req: Request, res: Response) => {
 app.get('/api/config/status', (_req: Request, res: Response) => {
   const breethStatus = getBreethStatus();
   const groqStatus = getGroqStatus();
-  
+  const openRouterStatus = getOpenRouterStatus();
+
   res.json({
     groq: {
-      available: groqStatus.available,
+      status: groqStatus.status,
+      error: groqStatus.error,
     },
     breeth: {
-      available: breethStatus.available,
+      status: breethStatus.status,
+      error: breethStatus.error,
+    },
+    openrouter: {
+      status: openRouterStatus.status,
+      error: openRouterStatus.error,
+    },
+    ocr: {
+      status: 'AVAILABLE' as const,
+    },
+    qr: {
+      status: 'AVAILABLE' as const,
+    },
+    threatIntelligence: {
+      status: 'NOT_CONFIGURED' as const,
     },
   });
 });
@@ -277,7 +314,7 @@ app.post('/api/investigate', async (req: Request<{}, {}, InvestigateRequestBody>
     result.aiReasoningStatus = getGroqStatus();
 
     // Store in Breeth memory if available (non-blocking)
-    if (breethStatus.available) {
+    if (getBreethStatus().status === 'AVAILABLE') {
       const signalIds = result.signals.map(s => s.id);
       const correlationIds = result.correlations.map(c => c.id);
       

@@ -42,6 +42,24 @@ export function analyzeBenignContext(signals: Signal[], text: string, urlHostnam
     'regular login',
     'standard procedure',
     'usual process',
+    // Internship/recruitment contexts
+    'internship',
+    'intern',
+    'job opening',
+    'job opportunity',
+    'career opportunity',
+    'recruitment',
+    'hiring',
+    'position available',
+    'data analyst',
+    'analytics intern',
+    'apply now',
+    'application',
+    'resume',
+    'cv',
+    'interview',
+    'joining',
+    'onboarding',
   ];
 
   for (const phrase of benignPhrases) {

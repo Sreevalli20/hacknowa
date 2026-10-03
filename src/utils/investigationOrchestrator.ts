@@ -16,7 +16,9 @@ import { calculateEnhancedRisk } from './enhancedScoring';
 import { analyzeUrlStructureEnhanced } from './enhancedUrlAnalyzer';
 import { extractTextFromBase64 } from './ocr';
 import { decodeQrFromBase64Server } from './qrDecoderServer';
-import { generateContextualReasoning, generateVisionAnalysis } from './groqReasoning';
+import { generateContextualReasoning as generateGroqReasoning, generateVisionAnalysis as generateGroqVision, getGroqStatus } from './groqReasoning';
+import { generateContextualReasoning as generateOpenRouterReasoning, generateVisionAnalysis as generateOpenRouterVision, getOpenRouterStatus } from './openrouterReasoning';
+import { getBreethStatus } from './breethMemory';
 
 export interface InvestigationInput {
   messageText?: string;
@@ -71,26 +73,53 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
       ocrSuccess = true;
     }
 
-    // Then try Groq Vision for additional analysis
+    // Then try AI Vision for additional analysis (try Groq first, then OpenRouter)
     try {
       const dataUrl = `data:${input.screenshotBase64.mimeType};base64,${input.screenshotBase64.data}`;
-      const visionResult = await generateVisionAnalysis(dataUrl);
-      if (visionResult && visionResult.visionResult) {
-        screenshotAnalysis = {
-          ...visionResult.visionResult,
-          source: ocrSuccess ? 'BOTH' : 'GROQ_VISION',
-        };
-        // Add Groq Vision observations to normalized text
-        if (screenshotAnalysis.visibleText) {
-          normalizedText += (normalizedText ? '\n\n' : '') + screenshotAnalysis.visibleText;
+
+      // Try Groq Vision first
+      const groqStatus = getGroqStatus();
+      if (groqStatus.status === 'AVAILABLE') {
+        const visionResult = await generateGroqVision(dataUrl);
+        if (visionResult && visionResult.visionResult) {
+          screenshotAnalysis = {
+            ...visionResult.visionResult,
+            source: ocrSuccess ? 'BOTH' : 'GROQ_VISION',
+          };
+          // Add AI Vision observations to normalized text
+          if (screenshotAnalysis.visibleText) {
+            normalizedText += (normalizedText ? '\n\n' : '') + screenshotAnalysis.visibleText;
+          }
+          if (screenshotAnalysis.visibleUrls && screenshotAnalysis.visibleUrls.length > 0) {
+            normalizedText += (normalizedText ? '\n\n' : '') + screenshotAnalysis.visibleUrls.join(' ');
+          }
+          groqVisionSuccess = true;
         }
-        if (screenshotAnalysis.visibleUrls && screenshotAnalysis.visibleUrls.length > 0) {
-          normalizedText += (normalizedText ? '\n\n' : '') + screenshotAnalysis.visibleUrls.join(' ');
+      }
+
+      // Fallback to OpenRouter Vision if Groq unavailable or failed
+      if (!groqVisionSuccess) {
+        const openRouterStatus = getOpenRouterStatus();
+        if (openRouterStatus.status === 'AVAILABLE') {
+          const visionResult = await generateOpenRouterVision(dataUrl);
+          if (visionResult && visionResult.visionResult) {
+            screenshotAnalysis = {
+              ...visionResult.visionResult,
+              source: ocrSuccess ? 'BOTH' : 'OPENROUTER_VISION',
+            };
+            // Add AI Vision observations to normalized text
+            if (screenshotAnalysis.visibleText) {
+              normalizedText += (normalizedText ? '\n\n' : '') + screenshotAnalysis.visibleText;
+            }
+            if (screenshotAnalysis.visibleUrls && screenshotAnalysis.visibleUrls.length > 0) {
+              normalizedText += (normalizedText ? '\n\n' : '') + screenshotAnalysis.visibleUrls.join(' ');
+            }
+            groqVisionSuccess = true;
+          }
         }
-        groqVisionSuccess = true;
       }
     } catch (error) {
-      console.warn('Groq Vision analysis failed:', error);
+      console.warn('AI Vision analysis failed:', error);
     }
 
     // If only OCR succeeded, set minimal analysis
@@ -219,34 +248,57 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
   // Step 12: Build summary
   const summary = buildSummary(scoringResult.riskLevel, allSignals, correlationResult.correlations);
 
-  // Step 13: Generate contextual AI reasoning via Groq (if available)
+  // Step 13: Generate contextual AI reasoning (try Groq first, then OpenRouter)
   let aiInterpretation: InvestigationResult['aiInterpretation'] | undefined;
   let aiReasoningAvailable = false;
   try {
-    const groqResult = await generateContextualReasoning({
-      inputType,
-      riskScore: scoringResult.riskScore,
-      riskLevel: scoringResult.riskLevel,
-      confidence: scoringResult.confidence,
-      exposureState,
-      signals: allSignals,
-      correlations: correlationResult.correlations,
-      verificationBoundary: scoringResult.verificationBoundary,
-      decisionTrace: scoringResult.decisionTrace,
-    });
+    const groqStatus = getGroqStatus();
+    const openRouterStatus = getOpenRouterStatus();
 
-    if (groqResult && groqResult.interpretation) {
+    let reasoningResult = null;
+
+    // Try Groq first
+    if (groqStatus.status === 'AVAILABLE') {
+      reasoningResult = await generateGroqReasoning({
+        inputType,
+        riskScore: scoringResult.riskScore,
+        riskLevel: scoringResult.riskLevel,
+        confidence: scoringResult.confidence,
+        exposureState,
+        signals: allSignals,
+        correlations: correlationResult.correlations,
+        verificationBoundary: scoringResult.verificationBoundary,
+        decisionTrace: scoringResult.decisionTrace,
+      });
+    }
+
+    // Fallback to OpenRouter if Groq unavailable or failed
+    if (!reasoningResult && openRouterStatus.status === 'AVAILABLE') {
+      reasoningResult = await generateOpenRouterReasoning({
+        inputType,
+        riskScore: scoringResult.riskScore,
+        riskLevel: scoringResult.riskLevel,
+        confidence: scoringResult.confidence,
+        exposureState,
+        signals: allSignals,
+        correlations: correlationResult.correlations,
+        verificationBoundary: scoringResult.verificationBoundary,
+        decisionTrace: scoringResult.decisionTrace,
+      });
+    }
+
+    if (reasoningResult && reasoningResult.interpretation) {
       aiInterpretation = {
-        summary: groqResult.interpretation.summary,
-        contextualExplanation: groqResult.interpretation.contextualExplanation,
-        attackPathWording: groqResult.interpretation.attackPathWording,
-        defensiveActions: groqResult.interpretation.defensiveActions,
+        summary: reasoningResult.interpretation.summary,
+        contextualExplanation: reasoningResult.interpretation.contextualExplanation,
+        attackPathWording: reasoningResult.interpretation.attackPathWording,
+        defensiveActions: reasoningResult.interpretation.defensiveActions,
       };
       aiReasoningAvailable = true;
     }
   } catch (error) {
-    // Groq failure is non-critical - continue with deterministic analysis
-    console.warn('Groq contextual reasoning failed:', error);
+    // AI failure is non-critical - continue with deterministic analysis
+    console.warn('AI contextual reasoning failed:', error);
   }
 
   // Build final result
@@ -277,7 +329,7 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
     deterministicBreakdown: scoringResult.deterministicBreakdown,
     aiInterpretation,
     aiReasoningStatus: {
-      available: aiReasoningAvailable,
+      status: aiReasoningAvailable ? 'AVAILABLE' as const : 'NOT_CONFIGURED' as const,
     },
     analyzedInputsSummary: {
       hasMessage,
@@ -285,9 +337,7 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
       hasScreenshot,
       hasQr,
     },
-    memoryStatus: {
-      available: false, // Will be set by server
-    },
+    memoryStatus: getBreethStatus(),
     threatIntelligenceStatus: {
       available: false, // No external threat intelligence configured
     },

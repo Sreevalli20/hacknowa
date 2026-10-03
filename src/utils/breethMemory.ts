@@ -1,5 +1,7 @@
 import { BreethClient, BreethError } from '@breeth/sdk';
 
+export type ProviderStatus = 'NOT_CONFIGURED' | 'AVAILABLE' | 'FAILED' | 'UNAUTHORIZED' | 'RATE_LIMITED';
+
 export interface InvestigationMemory {
   investigationId: string;
   timestamp: string;
@@ -12,36 +14,62 @@ export interface InvestigationMemory {
 }
 
 export interface MemoryStatus {
-  available: boolean;
+  status: ProviderStatus;
   error?: string;
 }
 
 let breethClient: BreethClient | null = null;
-let breethAvailable: boolean = false;
+let breethStatus: ProviderStatus = 'NOT_CONFIGURED';
 
 /**
  * Initialize Breeth client if API key is available.
- * Returns false if Breeth is not configured or fails to initialize.
+ * Performs a real API test to determine actual status.
  */
-export function initializeBreethMemory(): MemoryStatus {
+export async function initializeBreethMemory(): Promise<MemoryStatus> {
   const apiKey = process.env.BREETH_API_KEY;
-  
+
   if (!apiKey || apiKey.trim() === '') {
+    breethStatus = 'NOT_CONFIGURED';
     return {
-      available: false,
+      status: 'NOT_CONFIGURED',
       error: 'BREETH_API_KEY not configured',
     };
   }
 
   try {
     breethClient = new BreethClient({ apiKey });
-    breethAvailable = true;
-    return { available: true };
+
+    // Perform a real API test write
+    await breethClient.write({
+      content: 'TRACEZERO initialization test',
+      groupId: 'tracezero-test',
+      sourceDescription: 'test',
+      extractIntent: false,
+    });
+
+    breethStatus = 'AVAILABLE';
+    return { status: 'AVAILABLE' };
   } catch (error) {
+    if (error instanceof BreethError) {
+      if (error.slug === 'unauthorized' || error.slug === 'invalid_api_key') {
+        breethStatus = 'UNAUTHORIZED';
+      } else if (error.slug === 'rate_limit_exceeded') {
+        breethStatus = 'RATE_LIMITED';
+      } else {
+        breethStatus = 'FAILED';
+      }
+      console.warn('Breeth initialization failed:', error.slug, error.message);
+      return {
+        status: breethStatus,
+        error: `Breeth error: ${error.slug}`,
+      };
+    }
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    breethStatus = 'FAILED';
     console.warn('Breeth initialization failed:', errorMessage);
     return {
-      available: false,
+      status: 'FAILED',
       error: errorMessage,
     };
   }
@@ -54,7 +82,7 @@ export function initializeBreethMemory(): MemoryStatus {
 export async function storeInvestigation(
   memory: InvestigationMemory
 ): Promise<{ success: boolean; error?: string }> {
-  if (!breethAvailable || !breethClient) {
+  if (breethStatus !== 'AVAILABLE' || !breethClient) {
     return {
       success: false,
       error: 'Breeth memory service unavailable',
@@ -74,14 +102,22 @@ export async function storeInvestigation(
     return { success: true };
   } catch (error) {
     if (error instanceof BreethError) {
+      if (error.slug === 'unauthorized' || error.slug === 'invalid_api_key') {
+        breethStatus = 'UNAUTHORIZED';
+      } else if (error.slug === 'rate_limit_exceeded') {
+        breethStatus = 'RATE_LIMITED';
+      } else {
+        breethStatus = 'FAILED';
+      }
       console.warn('Breeth write error:', error.slug, error.message);
       return {
         success: false,
         error: `Breeth error: ${error.slug}`,
       };
     }
-    
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    breethStatus = 'FAILED';
     console.warn('Breeth write failed:', errorMessage);
     return {
       success: false,
@@ -98,7 +134,7 @@ export async function retrieveSimilarInvestigations(
   query: string,
   limit: number = 5
 ): Promise<{ memories: InvestigationMemory[]; error?: string }> {
-  if (!breethAvailable || !breethClient) {
+  if (breethStatus !== 'AVAILABLE' || !breethClient) {
     return {
       memories: [],
       error: 'Breeth memory service unavailable',
@@ -128,14 +164,22 @@ export async function retrieveSimilarInvestigations(
     return { memories };
   } catch (error) {
     if (error instanceof BreethError) {
+      if (error.slug === 'unauthorized' || error.slug === 'invalid_api_key') {
+        breethStatus = 'UNAUTHORIZED';
+      } else if (error.slug === 'rate_limit_exceeded') {
+        breethStatus = 'RATE_LIMITED';
+      } else {
+        breethStatus = 'FAILED';
+      }
       console.warn('Breeth retrieve error:', error.slug, error.message);
       return {
         memories: [],
         error: `Breeth error: ${error.slug}`,
       };
     }
-    
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    breethStatus = 'FAILED';
     console.warn('Breeth retrieve failed:', errorMessage);
     return {
       memories: [],
@@ -148,7 +192,5 @@ export async function retrieveSimilarInvestigations(
  * Get Breeth memory status.
  */
 export function getBreethStatus(): MemoryStatus {
-  return {
-    available: breethAvailable,
-  };
+  return { status: breethStatus };
 }

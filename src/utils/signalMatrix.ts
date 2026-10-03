@@ -79,16 +79,38 @@ export function extractSignalsFromText(text: string, source: 'message_text' | 'o
     ));
   }
 
-  if (/irs|internal revenue service|social security administration|court summons|federal agency|government official/i.test(text)) {
-    signals.push(createSignal(
-      `sig-${signalId++}`,
-      'government_authority_claim',
-      true,
-      extractMatch(text, /irs|internal revenue service|social security administration|court summons|federal agency|government official/i),
-      source,
-      'HIGH',
-      'identity_impersonation'
-    ));
+  // Government authority claim - context-aware detection
+  // Only trigger when there's actual impersonation context, not benign mentions
+  const govKeywords = ['irs', 'internal revenue service', 'social security administration', 'court summons', 'federal agency', 'government official'];
+  const benignContexts = ['internship', 'job', 'recruitment', 'career', 'position', 'role', 'opportunity', 'hiring', 'apply', 'application', 'data analyst', 'analytics intern'];
+  const hasGovKeyword = govKeywords.some(kw => new RegExp(kw, 'i').test(text));
+  const hasBenignContext = benignContexts.some(ctx => new RegExp(ctx, 'i').test(text));
+
+  // Only flag government authority if there's a claim of authority/threat, not just a benign mention
+  if (hasGovKeyword && !hasBenignContext) {
+    // Check for authority claim context
+    const authorityContexts = [
+      /irs.* (is|has|will|must|require|demand|need|urgent|immediate|suspend|lock|freeze|audit|investigate|legal|court|action)/i,
+      /internal revenue.* (is|has|will|must|require|demand|need|urgent|immediate|suspend|lock|freeze|audit|investigate|legal|court|action)/i,
+      /social security.* (is|has|will|must|require|demand|need|urgent|immediate|suspend|lock|freeze|audit|investigate|legal|court|action)/i,
+      /court summons/i,
+      /federal agency.* (is|has|will|must|require|demand|need|urgent|immediate|suspend|lock|freeze|audit|investigate|legal|court|action)/i,
+      /government official.* (is|has|will|must|require|demand|need|urgent|immediate|suspend|lock|freeze|audit|investigate|legal|court|action)/i,
+    ];
+
+    const hasAuthorityContext = authorityContexts.some(ctx => ctx.test(text));
+
+    if (hasAuthorityContext) {
+      signals.push(createSignal(
+        `sig-${signalId++}`,
+        'government_authority_claim',
+        true,
+        extractMatch(text, /irs|internal revenue service|social security administration|court summons|federal agency|government official/i),
+        source,
+        'HIGH',
+        'identity_impersonation'
+      ));
+    }
   }
 
   // Credential Targeting Signals

@@ -3,8 +3,10 @@
  * Provides contextual reasoning layer for investigation results
  */
 
+export type ProviderStatus = 'NOT_CONFIGURED' | 'AVAILABLE' | 'FAILED' | 'UNAUTHORIZED' | 'RATE_LIMITED';
+
 export interface GroqStatus {
-  available: boolean;
+  status: ProviderStatus;
   error?: string;
 }
 
@@ -26,35 +28,66 @@ export interface GroqVisionResult {
   analysis: string;
 }
 
-let groqAvailable: boolean = false;
+let groqStatus: ProviderStatus = 'NOT_CONFIGURED';
 let groqInitialized: boolean = false;
 
 /**
  * Initialize Groq API client if API key is available.
- * Returns false if Groq is not configured or fails to initialize.
+ * Performs a real API test to determine actual status.
  */
-export function initializeGroq(): GroqStatus {
+export async function initializeGroq(): Promise<GroqStatus> {
   const apiKey = process.env.GROQ_API_KEY;
-  
+
   if (!apiKey || apiKey.trim() === '') {
-    return {
-      available: false,
-      error: 'GROQ_API_KEY not configured',
-    };
+    groqStatus = 'NOT_CONFIGURED';
+    groqInitialized = true;
+    return { status: 'NOT_CONFIGURED', error: 'GROQ_API_KEY not configured' };
   }
 
-  groqAvailable = true;
-  groqInitialized = true;
-  return { available: true };
+  try {
+    // Perform a real API test request with a simple model list
+    const response = await fetch('https://api.groq.com/openai/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      signal: AbortSignal.timeout(10000), // 10 second timeout
+    });
+
+    if (response.status === 401) {
+      groqStatus = 'UNAUTHORIZED';
+      groqInitialized = true;
+      return { status: 'UNAUTHORIZED', error: 'Invalid API key' };
+    }
+
+    if (response.status === 429) {
+      groqStatus = 'RATE_LIMITED';
+      groqInitialized = true;
+      return { status: 'RATE_LIMITED', error: 'Rate limited' };
+    }
+
+    if (!response.ok) {
+      groqStatus = 'FAILED';
+      groqInitialized = true;
+      return { status: 'FAILED', error: `API test failed with status ${response.status}` };
+    }
+
+    groqStatus = 'AVAILABLE';
+    groqInitialized = true;
+    return { status: 'AVAILABLE' };
+  } catch (error) {
+    groqStatus = 'FAILED';
+    groqInitialized = true;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { status: 'FAILED', error: errorMessage };
+  }
 }
 
 /**
  * Get Groq status
  */
 export function getGroqStatus(): GroqStatus {
-  return {
-    available: groqAvailable,
-  };
+  return { status: groqStatus };
 }
 
 /**
@@ -74,7 +107,7 @@ export async function generateContextualReasoning(
     decisionTrace: Array<{ signal: string; contribution: number; rationale: string }>;
   }
 ): Promise<{ interpretation: GroqInterpretation; error?: string } | null> {
-  if (!groqAvailable) {
+  if (groqStatus !== 'AVAILABLE') {
     return null;
   }
 
@@ -153,6 +186,13 @@ Keep responses concise and actionable. Do not hallucinate threat intelligence or
     if (!response.ok) {
       const errorText = await response.text();
       console.warn('Groq API error:', response.status, errorText);
+      if (response.status === 401) {
+        groqStatus = 'UNAUTHORIZED';
+      } else if (response.status === 429) {
+        groqStatus = 'RATE_LIMITED';
+      } else {
+        groqStatus = 'FAILED';
+      }
       return null;
     }
 
@@ -209,7 +249,7 @@ Keep responses concise and actionable. Do not hallucinate threat intelligence or
 export async function generateVisionAnalysis(
   imageData: string
 ): Promise<{ visionResult: GroqVisionResult; error?: string } | null> {
-  if (!groqAvailable) {
+  if (groqStatus !== 'AVAILABLE') {
     return null;
   }
 
@@ -271,6 +311,13 @@ If the image is unreadable, unclear, or contains no relevant text, indicate that
     if (!response.ok) {
       const errorText = await response.text();
       console.warn('Groq Vision API error:', response.status, errorText);
+      if (response.status === 401) {
+        groqStatus = 'UNAUTHORIZED';
+      } else if (response.status === 429) {
+        groqStatus = 'RATE_LIMITED';
+      } else {
+        groqStatus = 'FAILED';
+      }
       return null;
     }
 
