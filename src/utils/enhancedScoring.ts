@@ -80,7 +80,7 @@ export function calculateEnhancedRisk(input: EnhancedScoringInput): EnhancedScor
   const evidenceGraph = buildEvidenceGraph(signals, correlations, text, riskLevel);
 
   // Step 14: Build deterministic breakdown
-  const deterministicBreakdown = buildDeterministicBreakdown(signals, correlations, normalizedScore, riskLevel);
+  const deterministicBreakdown = buildDeterministicBreakdown(signals, correlations, normalizedScore, riskLevel, exposureMultiplier);
 
   return {
     riskLevel,
@@ -342,11 +342,12 @@ function buildDeterministicBreakdown(
   signals: Signal[],
   correlations: CorrelationPattern[],
   normalizedScore: number,
-  riskLevel: RiskLevel
+  riskLevel: RiskLevel,
+  exposureMultiplier: number = 1.0
 ): DeterministicScoreBreakdown {
   const signalsTriggered = signals.map(s => ({
     name: s.name,
-    weight: s.riskContribution,
+    weight: Math.round(s.riskContribution * exposureMultiplier),
     category: s.category,
     matchedEvidence: s.evidence,
   }));
@@ -354,18 +355,21 @@ function buildDeterministicBreakdown(
   correlations.forEach(c => {
     signalsTriggered.push({
       name: `CORRELATION: ${c.name}`,
-      weight: c.riskContribution,
+      weight: Math.round(c.riskContribution * exposureMultiplier),
       category: 'correlation',
       matchedEvidence: c.interpretation,
     });
   });
+
+  // Calculate actual raw score (sum of all weights after multiplier)
+  const rawScore = signalsTriggered.reduce((sum, item) => sum + item.weight, 0);
 
   const scoringRationale = signalsTriggered.length === 0
     ? 'No high-risk threat indicators, credential solicitation, or deceptive structural markers were found in the supplied input.'
     : `Score calculated from ${signalsTriggered.length} triggered indicators (${signalsTriggered.map(t => `${t.name} [+${t.weight}]`).join(', ')}).`;
 
   return {
-    rawScore: normalizedScore,
+    rawScore,
     normalizedScore,
     riskLevel,
     signalsTriggered,
