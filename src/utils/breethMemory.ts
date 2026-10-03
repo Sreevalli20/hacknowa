@@ -1,12 +1,13 @@
 import { BreethClient, BreethError } from '@breeth/sdk';
 
 export interface InvestigationMemory {
+  investigationId: string;
   timestamp: string;
   inputType: 'message' | 'url' | 'screenshot' | 'qr';
   riskLevel: string;
   riskScore: number;
-  ruleIds: string[];
-  urlFindings?: string[];
+  signalIds: string[];
+  correlationIds: string[];
   summary: string;
 }
 

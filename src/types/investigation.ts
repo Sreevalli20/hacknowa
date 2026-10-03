@@ -188,6 +188,11 @@ export interface InvestigationResult {
     available: boolean;
   };
   
+  // AI reasoning status
+  aiReasoningStatus: {
+    available: boolean;
+  };
+  
   // Input summary
   analyzedInputsSummary: {
     hasMessage: boolean;

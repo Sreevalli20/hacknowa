@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { runInvestigation } from './src/utils/investigationOrchestrator.ts';
 import { initializeBreethMemory, storeInvestigation, getBreethStatus } from './src/utils/breethMemory.ts';
+import { initializeGroq, getGroqStatus } from './src/utils/groqReasoning.ts';
 import { dbService } from './src/server/db.ts';
 import {
   InvestigationResult,
@@ -27,6 +28,14 @@ if (breethStatus.available) {
   console.log('Breeth memory service initialized');
 } else {
   console.log('Breeth memory service unavailable (operating without external memory)');
+}
+
+// Initialize Groq reasoning (optional, graceful degradation)
+const groqStatus = initializeGroq();
+if (groqStatus.available) {
+  console.log('Groq contextual reasoning service initialized');
+} else {
+  console.log('Groq contextual reasoning service unavailable (operating with deterministic analysis only)');
 }
 
 // Auth middleware
@@ -64,6 +73,22 @@ function optionalAuth(req: Request, _res: Response, next: () => void) {
 
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok' });
+});
+
+// ======================== CONFIGURATION STATUS ENDPOINT ========================
+
+app.get('/api/config/status', (_req: Request, res: Response) => {
+  const breethStatus = getBreethStatus();
+  const groqStatus = getGroqStatus();
+  
+  res.json({
+    groq: {
+      available: groqStatus.available,
+    },
+    breeth: {
+      available: breethStatus.available,
+    },
+  });
 });
 
 // ======================== AUTHENTICATION API ========================
@@ -247,8 +272,9 @@ app.post('/api/investigate', async (req: Request<{}, {}, InvestigateRequestBody>
       exposureState,
     });
 
-    // Update memory status
+    // Update service status
     result.memoryStatus = getBreethStatus();
+    result.aiReasoningStatus = getGroqStatus();
 
     // Store in Breeth memory if available (non-blocking)
     if (breethStatus.available) {
@@ -256,12 +282,13 @@ app.post('/api/investigate', async (req: Request<{}, {}, InvestigateRequestBody>
       const correlationIds = result.correlations.map(c => c.id);
       
       storeInvestigation({
+        investigationId: result.id,
         timestamp: result.timestamp,
         inputType: result.inputType,
         riskLevel: result.riskLevel,
         riskScore: result.riskScore,
-        ruleIds: signalIds,
-        urlFindings: correlationIds,
+        signalIds,
+        correlationIds,
         summary: result.summary,
       }).catch((err) => {
         console.warn('Failed to store investigation in Breeth memory:', err);

@@ -16,6 +16,7 @@ import { calculateEnhancedRisk } from './enhancedScoring';
 import { analyzeUrlStructureEnhanced } from './enhancedUrlAnalyzer';
 import { extractTextFromBase64 } from './ocr';
 import { decodeQrFromDataUrl } from './qrDecoder';
+import { generateContextualReasoning } from './groqReasoning';
 
 export interface InvestigationInput {
   messageText?: string;
@@ -160,6 +161,36 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
   // Step 12: Build summary
   const summary = buildSummary(scoringResult.riskLevel, allSignals, correlationResult.correlations);
 
+  // Step 13: Generate contextual AI reasoning via Groq (if available)
+  let aiInterpretation: InvestigationResult['aiInterpretation'] | undefined;
+  let aiReasoningAvailable = false;
+  try {
+    const groqResult = await generateContextualReasoning({
+      inputType,
+      riskScore: scoringResult.riskScore,
+      riskLevel: scoringResult.riskLevel,
+      confidence: scoringResult.confidence,
+      exposureState,
+      signals: allSignals,
+      correlations: correlationResult.correlations,
+      verificationBoundary: scoringResult.verificationBoundary,
+      decisionTrace: scoringResult.decisionTrace,
+    });
+
+    if (groqResult && groqResult.interpretation) {
+      aiInterpretation = {
+        summary: groqResult.interpretation.summary,
+        contextualExplanation: groqResult.interpretation.contextualExplanation,
+        attackPathWording: groqResult.interpretation.attackPathWording,
+        defensiveActions: groqResult.interpretation.defensiveActions,
+      };
+      aiReasoningAvailable = true;
+    }
+  } catch (error) {
+    // Groq failure is non-critical - continue with deterministic analysis
+    console.warn('Groq contextual reasoning failed:', error);
+  }
+
   // Build final result
   const result: InvestigationResult = {
     id: investigationId,
@@ -184,6 +215,10 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
     urlAnalysis,
     qrDetails,
     deterministicBreakdown: scoringResult.deterministicBreakdown,
+    aiInterpretation,
+    aiReasoningStatus: {
+      available: aiReasoningAvailable,
+    },
     analyzedInputsSummary: {
       hasMessage,
       hasUrl,
@@ -432,6 +467,13 @@ function buildSummary(
 
   if (riskLevel === 'LOW') {
     return `Grounded examination found no immediate high-risk coercive indicators in the provided artifact. ${signalCount} signal(s) detected with no significant correlation patterns.`;
+  }
+
+  if (riskLevel === 'MEDIUM') {
+    if (correlationCount > 0) {
+      return `Structural indicators requiring caution were detected. These indicators alone do not establish that the destination is malicious. ${signalCount} evidence indicators and ${correlationCount} correlation pattern(s) identified based strictly on the provided artifact.`;
+    }
+    return `Structural indicators requiring caution were detected. These indicators alone do not establish that the destination is malicious. ${signalCount} evidence indicators identified based strictly on the provided artifact.`;
   }
 
   if (correlationCount > 0) {
