@@ -1,0 +1,104 @@
+{
+  "users": [
+    {
+      "id": "usr_analyst_demo",
+      "email": "analyst@tracezero.security",
+      "name": "Chief Security Analyst",
+      "passwordHash": "1a4ce6db4d56f6ac67f520f1f9b632f25e1d434b0633e12bc8a3b34c050644590d76f9b72596ac43ad2d04ca2c23fd931ff3e92e61fa7baa1285031697f5dca2",
+      "passwordSalt": "034e0b0c8d46d94a03a70aa21e068e0e",
+      "role": "Lead Forensic Investigator",
+      "settings": {
+        "autoSaveReports": true,
+        "defaultInputTab": "message",
+        "theme": "dark"
+      },
+      "createdAt": "2026-10-03T08:28:41.835Z"
+    }
+  ],
+  "sessions": [
+    {
+      "token": "tz_sess_7fc4338763b771942f2c3542ed1aec1c5309c208ed93f98e1ad757e1b156a541",
+      "userId": "usr_analyst_demo",
+      "createdAt": "2026-10-03T08:28:41.844Z"
+    },
+    {
+      "token": "tz_sess_bfa6a254d8bf0808dfa393fd7f08f3cb0a92cc8b68791f791908da7ad5b23b33",
+      "userId": "usr_analyst_demo",
+      "createdAt": "2026-10-03T08:28:48.805Z"
+    }
+  ],
+  "reports": [
+    {
+      "id": "rep_cecc3855-f8ae-40e8-928c-d2a1552951fd",
+      "userId": "usr_analyst_demo",
+      "title": "Banking Credential Harvesting SMS Audit",
+      "notes": "Reported by executive branch staff via forward-to-phish.",
+      "tags": [
+        "SMS",
+        "High Risk",
+        "Chase"
+      ],
+      "status": "ACTIVE",
+      "result": {
+        "riskLevel": "HIGH",
+        "riskScore": 68,
+        "summary": "Detected artificial urgency and credential verification solicitation targeting banking customer.",
+        "observed": [
+          "Message conveys urgency: \"Unauthorized sign-in\"",
+          "Destination points to secure-login.chase-account-verify.net"
+        ],
+        "inferred": [
+          "Potential credential harvesting vector using lookalike brand subdomain."
+        ],
+        "notVerified": [
+          "WHOIS records not queried",
+          "Server live response not executed"
+        ],
+        "recommendedActions": [
+          {
+            "action": "Do not enter credentials",
+            "priority": "IMMEDIATE",
+            "context": "Phishing vector"
+          }
+        ],
+        "falsePositiveConsiderations": [
+          "Could be benign if customer recently requested password reset."
+        ],
+        "evidenceLedger": [
+          {
+            "id": "ev-1",
+            "finding": "Urgency",
+            "evidence": "Unauthorized sign-in",
+            "type": "OBSERVED",
+            "confidence": "HIGH"
+          }
+        ],
+        "attackPath": [
+          {
+            "stepNumber": 1,
+            "label": "INGRESS",
+            "description": "SMS received",
+            "isPossibleOnly": false,
+            "status": "observed"
+          }
+        ],
+        "deterministicBreakdown": {
+          "rawScore": 68,
+          "normalizedScore": 68,
+          "riskLevel": "HIGH",
+          "signalsTriggered": [],
+          "scoringRationale": "Verified weights"
+        },
+        "analyzedInputsSummary": {
+          "hasMessage": true,
+          "hasUrl": true,
+          "hasScreenshot": false,
+          "hasQr": false
+        },
+        "timestamp": "2026-10-03T08:28:48.815Z"
+      },
+      "createdAt": "2026-10-03T08:28:48.820Z",
+      "updatedAt": "2026-10-03T08:28:48.820Z"
+    }
+  ]
+}
