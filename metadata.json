@@ -1,7 +1,6 @@
 {
   "name": "TRACEZERO",
-  "description": "AI-powered digital safety investigator. Grounded evidence analysis, local structural URL inspection, and strict zero-fabrication verification.",
+  "description": "Deterministic digital safety investigator. Grounded evidence analysis, local structural URL inspection, and strict zero-fabrication verification.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": ["MAJOR_CAPABILITY_DETERMINISTIC_ANALYSIS", "MAJOR_CAPABILITY_BREETH_MEMORY_OPTIONAL"]
 }
-

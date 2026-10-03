@@ -9,6 +9,6 @@ services:
         value: production
       - key: PORT
         value: 10000
-      - key: GEMINI_API_KEY
+      - key: BREETH_API_KEY
         sync: false
     healthCheckPath: /health

@@ -494,7 +494,7 @@ export const HomeInputView: React.FC<HomeInputViewProps> = ({
                     Click to select or drag and drop a screenshot here
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    Supports PNG, JPG, or WebP. Analyzed locally and with Gemini multimodal inspection.
+                    Supports PNG, JPG, or WebP. Analyzed locally with OCR text extraction.
                   </p>
                   <input
                     ref={screenshotInputRef}
