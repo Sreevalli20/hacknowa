@@ -133,48 +133,69 @@ export interface InvestigationResult {
   inputType: 'message' | 'url' | 'screenshot' | 'qr';
   originalInput: string;
   normalizedInput: string;
-  
+  summary: string;
+
   // Signal matrix
   signals: Signal[];
-  
+
   // Correlations
   correlations: CorrelationPattern[];
-  
+
   // Risk assessment
   riskLevel: RiskLevel;
   riskScore: number;
   confidence: ConfidenceLevel;
   exposureState: ExposureState;
-  
+
   // Evidence
   evidenceLedger: EvidenceItem[];
   evidenceGraph: EvidenceGraph;
   verificationBoundary: VerificationBoundary;
-  
+
+  // Threat intelligence status
+  threatIntelligenceStatus: {
+    available: boolean;
+    source?: string;
+    lookupTimestamp?: string;
+  };
+
   // Decision trace
   decisionTrace: DecisionTraceStep[];
-  
+
   // Attack path
   attackPath: AttackPathStep[];
-  
+
   // Recommendations
   recommendedActions: RecommendedAction[];
   falsePositiveConsiderations: string[];
   whatWouldChange: WhatWouldChange;
-  
+
   // URL analysis (if applicable)
   urlAnalysis?: URLStructuralAnalysis;
-  
+
   // QR details (if applicable)
   qrDetails?: {
     rawText: string;
     isUrl: boolean;
     extractedLocally: boolean;
   };
-  
+
+  // Screenshot analysis (if applicable)
+  screenshotAnalysis?: {
+    visibleText: string;
+    visibleUrls: string[];
+    visibleDomains: string[];
+    visibleButtons: string[];
+    credentialFields: boolean;
+    paymentIndicators: boolean;
+    urgencyIndicators: boolean;
+    analysis: string;
+    source: 'OCR' | 'GROQ_VISION' | 'BOTH' | 'FAILED';
+  };
+
   // Deterministic breakdown
   deterministicBreakdown: DeterministicScoreBreakdown;
-  
+
   // AI interpretation (optional)
   aiInterpretation?: {
     summary: string;
@@ -182,17 +203,17 @@ export interface InvestigationResult {
     attackPathWording: string[];
     defensiveActions: string[];
   };
-  
+
   // Memory status
   memoryStatus: {
     available: boolean;
   };
-  
+
   // AI reasoning status
   aiReasoningStatus: {
     available: boolean;
   };
-  
+
   // Input summary
   analyzedInputsSummary: {
     hasMessage: boolean;

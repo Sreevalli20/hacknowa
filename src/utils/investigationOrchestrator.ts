@@ -15,8 +15,8 @@ import { analyzeBenignContext } from './benignContextEngine';
 import { calculateEnhancedRisk } from './enhancedScoring';
 import { analyzeUrlStructureEnhanced } from './enhancedUrlAnalyzer';
 import { extractTextFromBase64 } from './ocr';
-import { decodeQrFromDataUrl } from './qrDecoder';
-import { generateContextualReasoning } from './groqReasoning';
+import { decodeQrFromBase64Server } from './qrDecoderServer';
+import { generateContextualReasoning, generateVisionAnalysis } from './groqReasoning';
 
 export interface InvestigationInput {
   messageText?: string;
@@ -58,11 +58,69 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
   let originalInput = input.messageText || input.urlText || '';
 
   // Extract text from screenshot if provided
+  let screenshotAnalysis: InvestigationResult['screenshotAnalysis'] = null;
   if (hasScreenshot && input.screenshotBase64) {
+    let ocrSuccess = false;
+    let groqVisionSuccess = false;
+
+    // First try OCR
     const ocrResult = await extractTextFromBase64(input.screenshotBase64.data);
     if (ocrResult.success && ocrResult.text) {
       normalizedText += (normalizedText ? '\n\n' : '') + ocrResult.text;
       originalInput = `[Screenshot OCR] ${ocrResult.text.substring(0, 200)}...`;
+      ocrSuccess = true;
+    }
+
+    // Then try Groq Vision for additional analysis
+    try {
+      const dataUrl = `data:${input.screenshotBase64.mimeType};base64,${input.screenshotBase64.data}`;
+      const visionResult = await generateVisionAnalysis(dataUrl);
+      if (visionResult && visionResult.visionResult) {
+        screenshotAnalysis = {
+          ...visionResult.visionResult,
+          source: ocrSuccess ? 'BOTH' : 'GROQ_VISION',
+        };
+        // Add Groq Vision observations to normalized text
+        if (screenshotAnalysis.visibleText) {
+          normalizedText += (normalizedText ? '\n\n' : '') + screenshotAnalysis.visibleText;
+        }
+        if (screenshotAnalysis.visibleUrls && screenshotAnalysis.visibleUrls.length > 0) {
+          normalizedText += (normalizedText ? '\n\n' : '') + screenshotAnalysis.visibleUrls.join(' ');
+        }
+        groqVisionSuccess = true;
+      }
+    } catch (error) {
+      console.warn('Groq Vision analysis failed:', error);
+    }
+
+    // If only OCR succeeded, set minimal analysis
+    if (ocrSuccess && !groqVisionSuccess) {
+      screenshotAnalysis = {
+        visibleText: ocrResult.text || '',
+        visibleUrls: [],
+        visibleDomains: [],
+        visibleButtons: [],
+        credentialFields: false,
+        paymentIndicators: false,
+        urgencyIndicators: false,
+        analysis: 'OCR text extraction completed',
+        source: 'OCR',
+      };
+    }
+
+    // If both failed
+    if (!ocrSuccess && !groqVisionSuccess) {
+      screenshotAnalysis = {
+        visibleText: '',
+        visibleUrls: [],
+        visibleDomains: [],
+        visibleButtons: [],
+        credentialFields: false,
+        paymentIndicators: false,
+        urgencyIndicators: false,
+        analysis: 'Screenshot analysis failed - unreadable or unsupported format',
+        source: 'FAILED',
+      };
     }
   }
 
@@ -70,11 +128,11 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
   let qrDetails: InvestigationResult['qrDetails'];
   if (hasQr) {
     let qrDecodedText = input.qrDecodedText;
-    
+
     if (input.qrScreenshotBase64 && !qrDecodedText) {
-      // Convert base64 data to data URL
+      // Use server-side QR decoder
       const dataUrl = `data:${input.qrScreenshotBase64.mimeType};base64,${input.qrScreenshotBase64.data}`;
-      const qrResult = await decodeQrFromDataUrl(dataUrl);
+      const qrResult = await decodeQrFromBase64Server(dataUrl);
       if (qrResult.success && qrResult.data) {
         qrDecodedText = qrResult.data;
       }
@@ -198,6 +256,7 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
     inputType,
     originalInput,
     normalizedInput: normalizedText,
+    summary,
     signals: allSignals,
     correlations: correlationResult.correlations,
     riskLevel: scoringResult.riskLevel,
@@ -214,6 +273,7 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
     whatWouldChange: scoringResult.whatWouldChange,
     urlAnalysis,
     qrDetails,
+    screenshotAnalysis,
     deterministicBreakdown: scoringResult.deterministicBreakdown,
     aiInterpretation,
     aiReasoningStatus: {
@@ -227,6 +287,9 @@ export async function runInvestigation(input: InvestigationInput): Promise<Inves
     },
     memoryStatus: {
       available: false, // Will be set by server
+    },
+    threatIntelligenceStatus: {
+      available: false, // No external threat intelligence configured
     },
   };
 

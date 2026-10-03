@@ -49,27 +49,8 @@ function ensureDbExists(): DatabaseSchema {
   }
 
   if (!fs.existsSync(DB_FILE)) {
-    // Seed with a demo account for immediate out-of-the-box exploration
-    const demoSalt = crypto.randomBytes(16).toString('hex');
-    const demoHash = hashPassword('SecOps2026!', demoSalt);
-
     const initialDb: DatabaseSchema = {
-      users: [
-        {
-          id: 'usr_analyst_demo',
-          email: 'analyst@tracezero.security',
-          name: 'Chief Security Analyst',
-          passwordHash: demoHash,
-          passwordSalt: demoSalt,
-          role: 'Lead Forensic Investigator',
-          settings: {
-            autoSaveReports: true,
-            defaultInputTab: 'message',
-            theme: 'dark',
-          },
-          createdAt: new Date().toISOString(),
-        },
-      ],
+      users: [],
       sessions: [],
       reports: [],
     };

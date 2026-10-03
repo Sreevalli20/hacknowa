@@ -45,19 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleUseDemoAccount = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      await login('analyst@tracezero.security', 'SecOps2026!');
-      onClose();
-      if (onSuccess) onSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Demo login failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
@@ -194,21 +182,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             )}
           </button>
 
-          {/* Quick Demo Login Option */}
-          <div className="pt-3 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={handleUseDemoAccount}
-              disabled={loading}
-              className="w-full py-2 rounded-xl text-xs font-medium border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition-colors flex items-center justify-center gap-2"
-            >
-              <KeyRound className="w-3.5 h-3.5 text-blue-400" />
-              <span>Continue as Demo Security Analyst</span>
-            </button>
-            <p className="text-[11px] text-slate-500 text-center mt-1.5">
-              One-click instant login pre-seeded with analyst privileges.
-            </p>
-          </div>
+
         </form>
       </div>
     </div>

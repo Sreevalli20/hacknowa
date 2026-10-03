@@ -15,6 +15,7 @@
     "@breeth/sdk": "^0.1.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
+    "canvas": "^3.2.3",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "jsqr": "^1.4.0",

@@ -15,6 +15,17 @@ export interface GroqInterpretation {
   defensiveActions: string[];
 }
 
+export interface GroqVisionResult {
+  visibleText: string;
+  visibleUrls: string[];
+  visibleDomains: string[];
+  visibleButtons: string[];
+  credentialFields: boolean;
+  paymentIndicators: boolean;
+  urgencyIndicators: boolean;
+  analysis: string;
+}
+
 let groqAvailable: boolean = false;
 let groqInitialized: boolean = false;
 
@@ -127,7 +138,7 @@ Keep responses concise and actionable. Do not hallucinate threat intelligence or
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-20b',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -186,6 +197,127 @@ Keep responses concise and actionable. Do not hallucinate threat intelligence or
       }
     } else {
       console.warn('Groq API request failed with unknown error');
+    }
+    return null;
+  }
+}
+
+/**
+ * Generate vision analysis using Groq's vision-capable model
+ * Returns null if Groq is unavailable or request fails
+ */
+export async function generateVisionAnalysis(
+  imageData: string
+): Promise<{ visionResult: GroqVisionResult; error?: string } | null> {
+  if (!groqAvailable) {
+    return null;
+  }
+
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    const systemPrompt = `You are the vision analysis layer for TRACEZERO.
+
+Analyze the provided image and extract only directly observable information.
+
+Never invent text that is not visible.
+Never claim to see content that is not clearly present.
+Never make assumptions about sender identity or domain reputation.
+
+Provide a structured JSON response with these fields:
+- visibleText: All text clearly visible in the image (exactly as written)
+- visibleUrls: Array of complete URLs visible in the image
+- visibleDomains: Array of domain names visible in the image
+- visibleButtons: Array of button labels or action text visible
+- credentialFields: Boolean - true if password/credential input fields are visible
+- paymentIndicators: Boolean - true if payment/card/banking indicators are visible
+- urgencyIndicators: Boolean - true if urgent/deadline language is visible
+- analysis: Brief description of what the image shows (2-3 sentences)
+
+If the image is unreadable, unclear, or contains no relevant text, indicate that clearly.`;
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageData,
+                },
+              },
+            ],
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 1024,
+        response_format: { type: 'json_object' },
+      }),
+      signal: AbortSignal.timeout(30000), // 30 second timeout
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn('Groq Vision API error:', response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      console.warn('Groq Vision API returned empty response');
+      return null;
+    }
+
+    // Parse the JSON response
+    let parsed: GroqVisionResult;
+    try {
+      parsed = JSON.parse(content);
+    } catch (error) {
+      console.warn('Failed to parse Groq Vision response as JSON:', error);
+      return null;
+    }
+
+    // Validate required fields
+    if (!parsed.visibleText && !parsed.analysis) {
+      console.warn('Groq Vision response missing required fields');
+      return null;
+    }
+
+    // Ensure arrays exist
+    if (!Array.isArray(parsed.visibleUrls)) {
+      parsed.visibleUrls = [];
+    }
+    if (!Array.isArray(parsed.visibleDomains)) {
+      parsed.visibleDomains = [];
+    }
+    if (!Array.isArray(parsed.visibleButtons)) {
+      parsed.visibleButtons = [];
+    }
+
+    return { visionResult: parsed };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        console.warn('Groq Vision API request timed out');
+      } else {
+        console.warn('Groq Vision API request failed:', error.message);
+      }
+    } else {
+      console.warn('Groq Vision API request failed with unknown error');
     }
     return null;
   }

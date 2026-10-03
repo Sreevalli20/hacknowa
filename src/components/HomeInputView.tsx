@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { decodeQrFromDataUrl } from '../utils/qrDecoder';
 import { analyzeUrlStructure } from '../utils/urlAnalyzer';
-import { DEMO_SCENARIOS, DemoScenario } from '../data/demoScenarios';
 import { URLStructuralAnalysis } from '../types/investigation';
 
 export interface InvestigationInputPayload {
@@ -184,26 +183,7 @@ export const HomeInputView: React.FC<HomeInputViewProps> = ({
     setIsDragging(false);
   };
 
-  // Load a demo scenario
-  const handleSelectDemo = (scenario: DemoScenario) => {
-    setMessageInput(scenario.messageText || '');
-    setUrlInput(scenario.urlText || '');
-    setScreenshotData(null);
-    setQrScreenshotData(null);
-    setQrDecodedValue(scenario.qrDecodedText || '');
-    setQrDecodingStatus(scenario.qrDecodedText ? 'Preloaded decoded QR payload' : '');
-    setQrDecodeError('');
 
-    if (scenario.category === 'SMS') {
-      setActiveTab('message');
-    } else if (scenario.category === 'URL') {
-      setActiveTab('url');
-    } else if (scenario.category === 'QR') {
-      setActiveTab('qr');
-    } else {
-      setActiveTab('combined');
-    }
-  };
 
   // Check if at least one input is provided
   const hasValidInput = Boolean(
@@ -244,37 +224,6 @@ export const HomeInputView: React.FC<HomeInputViewProps> = ({
         <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl mx-auto">
           Grounded multimodal forensic analysis. Zero fabricated reputation scores, zero synthetic blacklists, and zero hallucinated domain age.
         </p>
-      </div>
-
-      {/* Demo Scenario Selector Banner */}
-      <div className="mb-6 p-3.5 rounded-xl border border-slate-800 bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-blue-950 border border-blue-800/60 flex items-center justify-center text-blue-400">
-            <Info className="w-4 h-4" />
-          </div>
-          <div>
-            <span className="text-xs font-semibold text-slate-200 block">
-              Quick Test: Genuine Real-World Samples
-            </span>
-            <span className="text-[11px] text-slate-400">
-              Loads authentic message, URL, or QR structures into inputs for live verification.
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {DEMO_SCENARIOS.map((scenario) => (
-            <button
-              key={scenario.id}
-              type="button"
-              onClick={() => handleSelectDemo(scenario)}
-              className="px-2.5 py-1 text-[11px] font-medium rounded-md border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex items-center gap-1.5"
-              title={scenario.description}
-            >
-              <span className="text-blue-400 font-mono text-[10px]">[{scenario.category}]</span>
-              <span>{scenario.name.split(' (')[0]}</span>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Main Analysis Input Card */}

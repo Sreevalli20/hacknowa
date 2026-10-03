@@ -80,14 +80,11 @@ Date: ${new Date(report.createdAt).toLocaleString()}
 Risk Level: ${report.result.riskLevel} (${report.result.riskScore}/100)
 Status: ${report.status}
 
-Summary:
-${report.result.summary}
-
 Observed Facts:
-${report.result.observed.map((o) => `- ${o}`).join('\n')}
+${report.result.verificationBoundary.observed.map((o) => `- ${o}`).join('\n')}
 
 Inferred Vectors:
-${report.result.inferred.map((i) => `- ${i}`).join('\n')}
+${report.result.verificationBoundary.inferred.map((i) => `- ${i}`).join('\n')}
 
 Actions Recommended:
 ${report.result.recommendedActions.map((a) => `- [${a.priority}] ${a.action}`).join('\n')}
