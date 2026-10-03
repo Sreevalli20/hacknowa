@@ -429,13 +429,21 @@ export function analyzeMessage(text: string): MessageAnalysisResult {
     }
   }
 
-  // Generate not verified aspects
-  const notVerified: string[] = [
-    'Sender identity was not independently verified through secondary channels.',
-    'Message origin was not cryptographically authenticated.',
-    'External domain reputation and blacklist status were not queried.',
-    'No live analysis of URL destinations was performed.',
-  ];
+  // Generate not verified aspects - only include if relevant to this analysis
+  const notVerified: string[] = [];
+
+  if (evidenceLedger.length > 0) {
+    // Only add message verification statements if we actually analyzed a message
+    notVerified.push('Sender identity was not independently verified through secondary channels.');
+    notVerified.push('Message origin was not cryptographically authenticated.');
+  }
+
+  // Only add URL verification statements if URLs were detected
+  const hasUrlIndicators = evidenceLedger.some(e => e.signalCategory === 'url_anomaly');
+  if (hasUrlIndicators) {
+    notVerified.push('External domain reputation and blacklist status were not queried.');
+    notVerified.push('No live analysis of URL destinations was performed.');
+  }
 
   // Build attack path dynamically
   const attackPath: AttackPathStep[] = [
@@ -565,11 +573,10 @@ export function analyzeMessage(text: string): MessageAnalysisResult {
   if (evidenceLedger.length === 0) {
     observed.push('No coercive urgency, credential demands, or malicious indicators detected in text.');
     inferred.push('Communication structure is consistent with normal, non-coercive exchanges.');
-    falsePositiveConsiderations.push('Communication appears to be an expected peer-to-peer or workplace message.');
     recommendedActions.push({
-      action: 'Verify with the sender if this message was unexpected.',
+      action: 'No security-specific action was triggered by the supplied artifact. Continue normal caution.',
       priority: 'STANDARD',
-      context: 'Routine digital hygiene precaution.',
+      context: 'No high-risk indicators detected.',
     });
   } else {
     falsePositiveConsiderations.push('If you recently initiated a password reset or account verification, this could be a related notification.');

@@ -357,7 +357,18 @@ function buildAttackPath(
   const path: AttackPathStep[] = [];
   let stepNum = 1;
 
-  // Step 1: User receives communication
+  // Only show attack path if there are actual risk indicators
+  if (signals.length === 0 && correlations.length === 0) {
+    return [{
+      stepNumber: 1,
+      label: 'NO SUPPORTED ATTACK PROGRESSION',
+      description: 'No attack progression identified based on the supplied artifact.',
+      isPossibleOnly: false,
+      status: 'observed',
+    }];
+  }
+
+  // Step 1: User receives communication (only if there are signals)
   path.push({
     stepNumber: stepNum++,
     label: 'USER RECEIVES COMMUNICATION',
@@ -527,7 +538,13 @@ function buildRecommendedActions(
     });
   }
 
-  if (riskLevel === 'LOW') {
+  if (riskLevel === 'LOW' && signals.length === 0) {
+    actions.push({
+      action: 'No security-specific action was triggered by the supplied artifact. Continue normal caution.',
+      priority: 'STANDARD',
+      context: 'No high-risk indicators detected.',
+    });
+  } else if (riskLevel === 'LOW') {
     actions.push({
       action: 'Verify with the sender if this message was unexpected.',
       priority: 'STANDARD',
@@ -560,7 +577,8 @@ function buildFalsePositiveConsiderations(
     considerations.push('Legitimate organizations may use urgent language for time-sensitive notifications.');
   }
 
-  if (riskLevel === 'LOW') {
+  // Only add generic benign message consideration if there's actual benign context
+  if (riskLevel === 'LOW' && benignContext.isBenign) {
     considerations.push('Communication appears to be an expected peer-to-peer or workplace message.');
   }
 
@@ -579,7 +597,10 @@ function buildSummary(
   const correlationCount = correlations.length;
 
   if (riskLevel === 'LOW') {
-    return `Grounded examination found no immediate high-risk coercive indicators in the provided artifact. ${signalCount} signal(s) detected with no significant correlation patterns.`;
+    if (signalCount === 0) {
+      return 'Insufficient evidence to establish malicious activity from the supplied artifact. No high-risk threat indicators, credential solicitation, or deceptive structural markers were found.';
+    }
+    return `Insufficient evidence to establish malicious activity from the supplied artifact. ${signalCount} signal(s) detected with no significant correlation patterns requiring immediate concern.`;
   }
 
   if (riskLevel === 'MEDIUM') {

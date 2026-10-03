@@ -241,12 +241,20 @@ function buildVerificationBoundary(
     inferred.push('Financial solicitation indicates potential monetary fraud or unauthorized transaction attempts.');
   }
 
-  // Not verified - requires external evidence
-  notVerified.push('Sender identity was not independently verified through secondary channels.');
-  notVerified.push('Message origin was not cryptographically authenticated.');
-  notVerified.push('External domain reputation and blacklist status were not queried.');
-  notVerified.push('No live analysis of URL destinations was performed.');
-  notVerified.push('TLS certificate authority chain and validity status were not verified.');
+  // Not verified - requires external evidence (only add if relevant to this investigation)
+  const hasMessageSignals = signals.some(s => s.source === 'message_text');
+  const hasUrlSignals = signals.some(s => s.source === 'url_structure');
+
+  if (hasMessageSignals) {
+    notVerified.push('Sender identity was not independently verified through secondary channels.');
+    notVerified.push('Message origin was not cryptographically authenticated.');
+  }
+
+  if (hasUrlSignals || urlHostname) {
+    notVerified.push('External domain reputation and blacklist status were not queried.');
+    notVerified.push('No live analysis of URL destinations was performed.');
+    notVerified.push('TLS certificate authority chain and validity status were not verified.');
+  }
 
   if (urlHostname) {
     notVerified.push(`Domain ownership for ${urlHostname} was not verified through WHOIS or registrar records.`);

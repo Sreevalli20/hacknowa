@@ -240,13 +240,19 @@ export function analyzeUrlStructureEnhanced(rawInput: string): URLStructuralAnal
     });
   }
 
-  const notVerifiedAspects = [
-    'Domain registration date and WHOIS ownership records (not verified - no external registrar database accessed).',
-    'External reputation scores or blacklists (not verified - no third-party feeds queried).',
-    'Server-side payload and backend response status (not verified - URL was not executed or resolved over the network).',
-    'TLS certificate authority chain and validity status (not verified locally).',
-    nestedUrls.length > 0 ? 'Nested URL destinations were not executed or analyzed live.' : '',
-  ].filter(Boolean);
+  const notVerifiedAspects: string[] = [];
+
+  // Only add notVerifiedAspects if we have a valid URL to analyze
+  if (parsed) {
+    notVerifiedAspects.push('Domain registration date and WHOIS ownership records (not verified - no external registrar database accessed).');
+    notVerifiedAspects.push('External reputation scores or blacklists (not verified - no third-party feeds queried).');
+    notVerifiedAspects.push('Server-side payload and backend response status (not verified - URL was not executed or resolved over the network).');
+    notVerifiedAspects.push('TLS certificate authority chain and validity status (not verified locally).');
+
+    if (nestedUrls.length > 0) {
+      notVerifiedAspects.push('Nested URL destinations were not executed or analyzed live.');
+    }
+  }
 
   return {
     originalInput: rawInput,
