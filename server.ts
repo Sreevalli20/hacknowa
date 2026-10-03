@@ -2,18 +2,11 @@ import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { analyzeUrlStructure } from './src/utils/urlAnalyzer.ts';
-import { calculateDeterministicRisk } from './src/utils/scoring.ts';
-import { analyzeMessage } from './src/utils/messageAnalyzer.ts';
-import { extractTextFromBase64 } from './src/utils/ocr.ts';
+import { runInvestigation } from './src/utils/investigationOrchestrator.ts';
 import { initializeBreethMemory, storeInvestigation, getBreethStatus } from './src/utils/breethMemory.ts';
 import { dbService } from './src/server/db.ts';
 import {
-  EvidenceItem,
-  AttackPathStep,
-  RecommendedAction,
   InvestigationResult,
-  URLStructuralAnalysis,
   EmergencyPlanResponse,
   EmergencyActionItem,
 } from './src/types/investigation.ts';
@@ -220,6 +213,7 @@ interface InvestigateRequestBody {
     data: string;
   };
   qrDecodedText?: string;
+  exposureState?: 'NOT_INTERACTED' | 'VIEWED_ONLY' | 'CLICKED' | 'CREDENTIAL_ENTERED' | 'OTP_SHARED' | 'PAYMENT_ENTERED' | 'FILE_DOWNLOADED' | 'PERMISSION_GRANTED' | 'UNKNOWN';
 }
 
 app.post('/api/investigate', async (req: Request<{}, {}, InvestigateRequestBody>, res: Response) => {
@@ -230,6 +224,7 @@ app.post('/api/investigate', async (req: Request<{}, {}, InvestigateRequestBody>
       screenshotBase64,
       qrScreenshotBase64,
       qrDecodedText,
+      exposureState,
     } = req.body;
 
     const hasMessage = Boolean(messageText && messageText.trim().length > 0);
@@ -242,99 +237,31 @@ app.post('/api/investigate', async (req: Request<{}, {}, InvestigateRequestBody>
       return;
     }
 
-    // Determine target URL to analyze structurally
-    let effectiveUrl = urlText?.trim() || '';
-    if (!effectiveUrl && qrDecodedText && /^https?:\/\//i.test(qrDecodedText.trim())) {
-      effectiveUrl = qrDecodedText.trim();
-    }
+    // Run investigation through orchestrator
+    const result = await runInvestigation({
+      messageText,
+      urlText,
+      screenshotBase64,
+      qrScreenshotBase64,
+      qrDecodedText,
+      exposureState,
+    });
 
-    let urlAnalysis: URLStructuralAnalysis | undefined;
-    if (effectiveUrl) {
-      urlAnalysis = analyzeUrlStructure(effectiveUrl);
-    }
-
-    // Analyze message text (or text extracted from screenshot/QR)
-    let textToAnalyze = messageText || '';
-    
-    // Attempt OCR on screenshot if provided
-    if (hasScreenshot && screenshotBase64) {
-      const ocrResult = await extractTextFromBase64(screenshotBase64.data);
-      if (ocrResult.success && ocrResult.text) {
-        textToAnalyze += (textToAnalyze ? '\n\n' : '') + ocrResult.text;
-      }
-    }
-
-    // Add QR decoded text if available
-    if (qrDecodedText) {
-      textToAnalyze += (textToAnalyze ? '\n\n' : '') + qrDecodedText;
-    }
-
-    // Run deterministic message analysis
-    const messageAnalysis = analyzeMessage(textToAnalyze);
-
-    // Merge URL structural flags into evidence ledger
-    if (urlAnalysis && urlAnalysis.structuralFlags.length > 0) {
-      for (const flag of urlAnalysis.structuralFlags) {
-        messageAnalysis.evidenceLedger.push({
-          id: `ev-url-${messageAnalysis.evidenceLedger.length + 1}`,
-          finding: `Local URL Structural Flag: ${flag.name}`,
-          evidence: flag.details,
-          type: 'OBSERVED',
-          confidence: flag.severity === 'critical' || flag.severity === 'high' ? 'HIGH' : 'MEDIUM',
-          signalCategory: 'url_anomaly',
-        });
-        messageAnalysis.observed.push(`URL structural analysis detected: ${flag.name}`);
-      }
-    }
-
-    // Run deterministic risk scoring
-    const deterministicBreakdown = calculateDeterministicRisk(messageAnalysis.evidenceLedger, urlAnalysis);
-
-    // Build result
-    const result: InvestigationResult = {
-      riskLevel: deterministicBreakdown.riskLevel,
-      riskScore: deterministicBreakdown.normalizedScore,
-      summary: messageAnalysis.evidenceLedger.length > 0
-        ? `Analysis identified ${messageAnalysis.evidenceLedger.length} evidence indicators requiring scrutiny based strictly on the provided artifact.`
-        : 'Grounded examination found no immediate high-risk coercive indicators in the provided artifact.',
-      observed: messageAnalysis.observed,
-      inferred: messageAnalysis.inferred,
-      notVerified: messageAnalysis.notVerified,
-      recommendedActions: messageAnalysis.recommendedActions,
-      falsePositiveConsiderations: messageAnalysis.falsePositiveConsiderations,
-      evidenceLedger: messageAnalysis.evidenceLedger,
-      attackPath: messageAnalysis.attackPath,
-      urlAnalysis,
-      qrDetails: qrDecodedText
-        ? {
-            rawText: qrDecodedText,
-            isUrl: /^https?:\/\//i.test(qrDecodedText.trim()),
-            extractedLocally: true,
-          }
-        : undefined,
-      deterministicBreakdown,
-      analyzedInputsSummary: {
-        hasMessage,
-        hasUrl,
-        hasScreenshot,
-        hasQr,
-      },
-      timestamp: new Date().toISOString(),
-      memoryStatus: getBreethStatus(),
-    };
+    // Update memory status
+    result.memoryStatus = getBreethStatus();
 
     // Store in Breeth memory if available (non-blocking)
     if (breethStatus.available) {
-      const ruleIds = messageAnalysis.evidenceLedger.map(e => e.id);
-      const urlFindings = urlAnalysis?.structuralFlags.map(f => f.name) || [];
+      const signalIds = result.signals.map(s => s.id);
+      const correlationIds = result.correlations.map(c => c.id);
       
       storeInvestigation({
         timestamp: result.timestamp,
-        inputType: hasScreenshot ? 'screenshot' : hasQr ? 'qr' : hasUrl ? 'url' : 'message',
+        inputType: result.inputType,
         riskLevel: result.riskLevel,
         riskScore: result.riskScore,
-        ruleIds,
-        urlFindings,
+        ruleIds: signalIds,
+        urlFindings: correlationIds,
         summary: result.summary,
       }).catch((err) => {
         console.warn('Failed to store investigation in Breeth memory:', err);

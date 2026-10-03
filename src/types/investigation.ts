@@ -1,8 +1,63 @@
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
-export type FindingType = 'OBSERVED' | 'INFERRED' | 'UNKNOWN';
+export type FindingType = 'OBSERVED' | 'INFERRED' | 'NOT_VERIFIED';
 
 export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export type ExposureState = 'NOT_INTERACTED' | 'VIEWED_ONLY' | 'CLICKED' | 'CREDENTIAL_ENTERED' | 'OTP_SHARED' | 'PAYMENT_ENTERED' | 'FILE_DOWNLOADED' | 'PERMISSION_GRANTED' | 'UNKNOWN';
+
+export type SignalCategory = 'social_engineering' | 'identity_impersonation' | 'credential_targeting' | 'authentication_targeting' | 'payment_targeting' | 'urgency_coercion' | 'url_structure' | 'destination_deception' | 'content_language' | 'action_request' | 'delivery_context' | 'correlation' | 'user_exposure' | 'verification_gap' | 'unknown';
+
+export interface Signal {
+  id: string;
+  name: string;
+  value: boolean | string | number;
+  evidence: string;
+  source: 'message_text' | 'url_structure' | 'ocr_text' | 'qr_content' | 'correlation' | 'context';
+  type: FindingType;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  confidence: ConfidenceLevel;
+  riskContribution: number;
+  category: SignalCategory;
+}
+
+export interface CorrelationPattern {
+  id: string;
+  name: string;
+  description: string;
+  signals: string[];
+  riskContribution: number;
+  confidence: ConfidenceLevel;
+  interpretation: string;
+}
+
+export interface DecisionTraceStep {
+  id: string;
+  signal: string;
+  contribution: number;
+  rationale: string;
+  rule: string;
+}
+
+export interface EvidenceGraph {
+  input: string;
+  observations: Signal[];
+  correlations: CorrelationPattern[];
+  interpretation: string;
+  possibleConsequences: string[];
+  userAction: string;
+}
+
+export interface VerificationBoundary {
+  observed: string[];
+  inferred: string[];
+  notVerified: string[];
+}
+
+export interface WhatWouldChange {
+  increaseConfidence: string[];
+  reduceConcern: string[];
+}
 
 export interface EvidenceItem {
   id: string;
@@ -10,7 +65,8 @@ export interface EvidenceItem {
   evidence: string;
   type: FindingType;
   confidence: ConfidenceLevel;
-  signalCategory?: 'credential' | 'urgency' | 'otp' | 'payment' | 'url_anomaly' | 'malware' | 'impersonation' | 'permission' | 'neutral';
+  signalCategory?: SignalCategory;
+  riskContribution?: number;
 }
 
 export interface AttackPathStep {
@@ -72,30 +128,73 @@ export interface RecommendedAction {
 }
 
 export interface InvestigationResult {
+  id: string;
+  timestamp: string;
+  inputType: 'message' | 'url' | 'screenshot' | 'qr';
+  originalInput: string;
+  normalizedInput: string;
+  
+  // Signal matrix
+  signals: Signal[];
+  
+  // Correlations
+  correlations: CorrelationPattern[];
+  
+  // Risk assessment
   riskLevel: RiskLevel;
   riskScore: number;
-  summary: string;
-  observed: string[];
-  inferred: string[];
-  notVerified: string[];
+  confidence: ConfidenceLevel;
+  exposureState: ExposureState;
+  
+  // Evidence
+  evidenceLedger: EvidenceItem[];
+  evidenceGraph: EvidenceGraph;
+  verificationBoundary: VerificationBoundary;
+  
+  // Decision trace
+  decisionTrace: DecisionTraceStep[];
+  
+  // Attack path
+  attackPath: AttackPathStep[];
+  
+  // Recommendations
   recommendedActions: RecommendedAction[];
   falsePositiveConsiderations: string[];
-  evidenceLedger: EvidenceItem[];
-  attackPath: AttackPathStep[];
+  whatWouldChange: WhatWouldChange;
+  
+  // URL analysis (if applicable)
   urlAnalysis?: URLStructuralAnalysis;
+  
+  // QR details (if applicable)
   qrDetails?: {
     rawText: string;
     isUrl: boolean;
     extractedLocally: boolean;
   };
+  
+  // Deterministic breakdown
   deterministicBreakdown: DeterministicScoreBreakdown;
+  
+  // AI interpretation (optional)
+  aiInterpretation?: {
+    summary: string;
+    contextualExplanation: string;
+    attackPathWording: string[];
+    defensiveActions: string[];
+  };
+  
+  // Memory status
+  memoryStatus: {
+    available: boolean;
+  };
+  
+  // Input summary
   analyzedInputsSummary: {
     hasMessage: boolean;
     hasUrl: boolean;
     hasScreenshot: boolean;
     hasQr: boolean;
   };
-  timestamp: string;
 }
 
 export interface EmergencyChecklist {
