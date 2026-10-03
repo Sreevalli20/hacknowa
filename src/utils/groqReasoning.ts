@@ -171,7 +171,7 @@ Keep responses concise and actionable. Do not hallucinate threat intelligence or
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-20b',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -286,7 +286,7 @@ If the image is unreadable, unclear, or contains no relevant text, indicate that
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'qwen/qwen3.8-27b',
         messages: [
           { role: 'system', content: systemPrompt },
           {

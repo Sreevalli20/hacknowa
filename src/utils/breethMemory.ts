@@ -1,5 +1,3 @@
-import { BreethClient, BreethError } from '@breeth/sdk';
-
 export type ProviderStatus = 'NOT_CONFIGURED' | 'AVAILABLE' | 'FAILED' | 'UNAUTHORIZED' | 'RATE_LIMITED';
 
 export interface InvestigationMemory {
@@ -18,7 +16,6 @@ export interface MemoryStatus {
   error?: string;
 }
 
-let breethClient: BreethClient | null = null;
 let breethStatus: ProviderStatus = 'NOT_CONFIGURED';
 
 /**
@@ -37,36 +34,52 @@ export async function initializeBreethMemory(): Promise<MemoryStatus> {
   }
 
   try {
-    breethClient = new BreethClient({ apiKey });
-
-    // Perform a real API test write
-    await breethClient.write({
-      content: 'TRACEZERO initialization test',
-      groupId: 'tracezero-test',
-      sourceDescription: 'test',
-      extractIntent: false,
+    // Perform a real API test write using REST API
+    const response = await fetch('https://api.thebreeth.com/v1/episodes', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: 'TRACEZERO initialization test',
+        group_id: 'tracezero-test',
+        extract_intent: false,
+      }),
+      signal: AbortSignal.timeout(10000), // 10 second timeout
     });
+
+    if (response.status === 401) {
+      breethStatus = 'UNAUTHORIZED';
+      return { status: 'UNAUTHORIZED', error: 'Invalid API key' };
+    }
+
+    if (response.status === 403) {
+      const errorData = await response.json().catch(() => ({}));
+      if (errorData.slug === 'missing_scope') {
+        breethStatus = 'UNAUTHORIZED';
+        return { status: 'UNAUTHORIZED', error: 'API key missing write scope' };
+      }
+      breethStatus = 'UNAUTHORIZED';
+      return { status: 'UNAUTHORIZED', error: 'Forbidden' };
+    }
+
+    if (response.status === 429) {
+      breethStatus = 'RATE_LIMITED';
+      return { status: 'RATE_LIMITED', error: 'Rate limited' };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      breethStatus = 'FAILED';
+      return { status: 'FAILED', error: `API test failed with status ${response.status}: ${errorText}` };
+    }
 
     breethStatus = 'AVAILABLE';
     return { status: 'AVAILABLE' };
   } catch (error) {
-    if (error instanceof BreethError) {
-      if (error.slug === 'unauthorized' || error.slug === 'invalid_api_key') {
-        breethStatus = 'UNAUTHORIZED';
-      } else if (error.slug === 'rate_limit_exceeded') {
-        breethStatus = 'RATE_LIMITED';
-      } else {
-        breethStatus = 'FAILED';
-      }
-      console.warn('Breeth initialization failed:', error.slug, error.message);
-      return {
-        status: breethStatus,
-        error: `Breeth error: ${error.slug}`,
-      };
-    }
-
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     breethStatus = 'FAILED';
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.warn('Breeth initialization failed:', errorMessage);
     return {
       status: 'FAILED',
@@ -82,40 +95,61 @@ export async function initializeBreethMemory(): Promise<MemoryStatus> {
 export async function storeInvestigation(
   memory: InvestigationMemory
 ): Promise<{ success: boolean; error?: string }> {
-  if (breethStatus !== 'AVAILABLE' || !breethClient) {
+  if (breethStatus !== 'AVAILABLE') {
     return {
       success: false,
       error: 'Breeth memory service unavailable',
     };
   }
 
+  const apiKey = process.env.BREETH_API_KEY;
+  if (!apiKey) {
+    return {
+      success: false,
+      error: 'BREETH_API_KEY not configured',
+    };
+  }
+
   try {
     const content = JSON.stringify(memory, null, 2);
-    
-    await breethClient.write({
-      content: `TRACEZERO Investigation\n\n${content}`,
-      groupId: 'tracezero-investigations',
-      sourceDescription: 'tracezero-investigation',
-      extractIntent: false,
+
+    const response = await fetch('https://api.thebreeth.com/v1/episodes', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: `TRACEZERO Investigation\n\n${content}`,
+        group_id: 'tracezero-investigations',
+        extract_intent: false,
+      }),
+      signal: AbortSignal.timeout(30000), // 30 second timeout
     });
+
+    if (response.status === 401) {
+      breethStatus = 'UNAUTHORIZED';
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    if (response.status === 403) {
+      breethStatus = 'UNAUTHORIZED';
+      return { success: false, error: 'Forbidden' };
+    }
+
+    if (response.status === 429) {
+      breethStatus = 'RATE_LIMITED';
+      return { success: false, error: 'Rate limited' };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      breethStatus = 'FAILED';
+      return { success: false, error: `Write failed with status ${response.status}: ${errorText}` };
+    }
 
     return { success: true };
   } catch (error) {
-    if (error instanceof BreethError) {
-      if (error.slug === 'unauthorized' || error.slug === 'invalid_api_key') {
-        breethStatus = 'UNAUTHORIZED';
-      } else if (error.slug === 'rate_limit_exceeded') {
-        breethStatus = 'RATE_LIMITED';
-      } else {
-        breethStatus = 'FAILED';
-      }
-      console.warn('Breeth write error:', error.slug, error.message);
-      return {
-        success: false,
-        error: `Breeth error: ${error.slug}`,
-      };
-    }
-
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     breethStatus = 'FAILED';
     console.warn('Breeth write failed:', errorMessage);
@@ -134,23 +168,61 @@ export async function retrieveSimilarInvestigations(
   query: string,
   limit: number = 5
 ): Promise<{ memories: InvestigationMemory[]; error?: string }> {
-  if (breethStatus !== 'AVAILABLE' || !breethClient) {
+  if (breethStatus !== 'AVAILABLE') {
     return {
       memories: [],
       error: 'Breeth memory service unavailable',
     };
   }
 
+  const apiKey = process.env.BREETH_API_KEY;
+  if (!apiKey) {
+    return {
+      memories: [],
+      error: 'BREETH_API_KEY not configured',
+    };
+  }
+
   try {
-    const result = await breethClient.retrieve({
-      query: `TRACEZERO investigation ${query}`,
-      groupId: 'tracezero-investigations',
-      limit,
+    const response = await fetch('https://api.thebreeth.com/v1/search', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `TRACEZERO investigation ${query}`,
+        group_id: 'tracezero-investigations',
+        limit,
+      }),
+      signal: AbortSignal.timeout(30000), // 30 second timeout
     });
 
+    if (response.status === 401) {
+      breethStatus = 'UNAUTHORIZED';
+      return { memories: [], error: 'Unauthorized' };
+    }
+
+    if (response.status === 403) {
+      breethStatus = 'UNAUTHORIZED';
+      return { memories: [], error: 'Forbidden' };
+    }
+
+    if (response.status === 429) {
+      breethStatus = 'RATE_LIMITED';
+      return { memories: [], error: 'Rate limited' };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      breethStatus = 'FAILED';
+      return { memories: [], error: `Search failed with status ${response.status}: ${errorText}` };
+    }
+
+    const data = await response.json();
     const memories: InvestigationMemory[] = [];
-    
-    for (const edge of result.edges || []) {
+
+    for (const edge of data.edges || []) {
       try {
         const parsed = JSON.parse(edge.fact || '{}');
         if (parsed.timestamp && parsed.riskLevel) {
@@ -163,21 +235,6 @@ export async function retrieveSimilarInvestigations(
 
     return { memories };
   } catch (error) {
-    if (error instanceof BreethError) {
-      if (error.slug === 'unauthorized' || error.slug === 'invalid_api_key') {
-        breethStatus = 'UNAUTHORIZED';
-      } else if (error.slug === 'rate_limit_exceeded') {
-        breethStatus = 'RATE_LIMITED';
-      } else {
-        breethStatus = 'FAILED';
-      }
-      console.warn('Breeth retrieve error:', error.slug, error.message);
-      return {
-        memories: [],
-        error: `Breeth error: ${error.slug}`,
-      };
-    }
-
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     breethStatus = 'FAILED';
     console.warn('Breeth retrieve failed:', errorMessage);

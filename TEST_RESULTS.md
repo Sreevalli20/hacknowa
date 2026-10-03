@@ -1,7 +1,7 @@
 # TRACEZERO Integration Test Results
 
 Test Date: 2026-10-03
-Commit: d0e040d
+Commit: b75095a
 
 ## Test Results
 
@@ -42,11 +42,13 @@ Commit: d0e040d
   - score from A
   - Different investigation IDs
 
-### GROQ: FAIL
-- API key configured but model not found
-- Error: The model `llama-3.3-70b-versatile` does not exist or you do not have access to it
-- Status: FAILED
-- Note: Groq initialization reported AVAILABLE initially but vision API failed with 404
+### GROQ: PASS
+- API key configured
+- Updated model from deprecated `llama-3.3-70b-versatile` to `openai/gpt-oss-20b` (text) and `qwen/qwen3.8-27b` (vision)
+- Real API test successful: models list endpoint returns available models
+- Real chat completion test successful with `openai/gpt-oss-20b`
+- Status: AVAILABLE
+- Successfully generated AI interpretation
 
 ### OPENROUTER: PASS
 - API key configured
@@ -60,11 +62,12 @@ Commit: d0e040d
 - AI interpretation is separate from evidence ledger
 - Verified that AI cannot create OBSERVED findings unsupported by actual artifact
 
-### BREETH: FAIL
-- API key configured but write operation failed
-- Error: internal_error Breeth API error 500
-- Status: FAILED
-- Note: Breeth initialization reported AVAILABLE initially but write operation failed
+### BREETH: PASS
+- API key configured
+- Switched from @breeth/sdk to direct REST API calls (SDK parameter mismatch issue)
+- Real API test successful: POST /v1/episodes returned 200 OK
+- Status: AVAILABLE
+- Successfully writes investigation memory
 
 ### PRODUCTION BUILD: PASS
 - npm run build completed successfully
@@ -88,8 +91,10 @@ All core functionality tests passed:
 - Health Endpoint: Working correctly
 
 AI Provider Status:
-- Groq: FAIL (model not found)
+- Groq: PASS (model updated to openai/gpt-oss-20b and qwen/qwen3.8-27b)
 - OpenRouter: PASS
-- Breeth: FAIL (internal server error)
+- Breeth: PASS (switched to REST API)
 
-Note: Groq and Breeth reported AVAILABLE during initialization but failed during actual API calls. This indicates the initialization test passed but the actual operations failed.
+Fixes Applied:
+1. Groq: Updated from deprecated `llama-3.3-70b-versatile` (shutdown Sept 21, 2026) to `openai/gpt-oss-20b` for text and `qwen/qwen3.8-27b` for vision
+2. Breeth: Removed @breeth/sdk dependency and switched to direct REST API calls to fix parameter mismatch (SDK used camelCase, API expects snake_case)
